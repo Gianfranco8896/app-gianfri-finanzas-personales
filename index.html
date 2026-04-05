@@ -287,13 +287,19 @@ body.privacy .kpi-val:hover,body.privacy .ia:hover,body.privacy .sv:hover{filter
 <!-- RESUMEN -->
 <div class="page active" id="page-resumen">
   <div class="ph"><div class="ph-title">Panel <em>principal</em></div><div class="ph-sub">Vista del mes en curso</div></div>
-  <div class="kpi-row" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+  <div class="kpi-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
     <div class="kpi"><div class="kpi-top" style="background:var(--green)"></div>
       <div class="kpi-lbl">Ingresos <span class="tip-mark">?<span class="tip-popup">Total de ingresos registrados este mes (fijos + variables).</span></span></div>
       <div class="kpi-val" id="k-ing">$0</div><div class="kpi-sub" id="k-ing-s">—</div><div class="kpi-delta" id="k-ing-d"></div></div>
     <div class="kpi"><div class="kpi-top" style="background:var(--teal)"></div>
-      <div class="kpi-lbl">Invertido <span class="tip-mark">?<span class="tip-popup">Monto total destinado a inversiones este mes. Se descuenta del balance.</span></span></div>
-      <div class="kpi-val" id="k-inv">$0</div><div class="kpi-sub" id="k-inv-s">del ingreso</div></div>
+      <div class="kpi-lbl">Invertido este mes <span class="tip-mark">?<span class="tip-popup">Lo que aportaste a inversiones solo este mes, en CLP. Se descuenta del balance.</span></span></div>
+      <div class="kpi-val" id="k-inv">$0</div><div class="kpi-sub" id="k-inv-s">del ingreso del mes</div></div>
+    <div class="kpi"><div class="kpi-top" style="background:var(--purple)"></div>
+      <div class="kpi-lbl">Invertido este año <span class="tip-mark">?<span class="tip-popup">Suma de todas tus inversiones del año actual convertidas a CLP al tipo de cambio actual.</span></span></div>
+      <div class="kpi-val" id="k-port">$0</div>
+      <div class="kpi-sub" id="fx-display" style="font-size:9px;margin-top:3px;color:var(--muted2)">cargando tipo de cambio...</div></div>
+  </div>
+  <div class="kpi-row" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:-6px">
     <div class="kpi"><div class="kpi-top" style="background:var(--red)"></div>
       <div class="kpi-lbl">Gastos <span class="tip-mark">?<span class="tip-popup">Total de gastos registrados este mes por categoría.</span></span></div>
       <div class="kpi-val" id="k-gas">$0</div><div class="kpi-sub" id="k-gas-s">del ingreso</div><div class="kpi-delta" id="k-gas-d"></div></div>
@@ -398,12 +404,17 @@ body.privacy .kpi-val:hover,body.privacy .ia:hover,body.privacy .sv:hover{filter
           <option value="efectivo">Efectivo / Ahorro</option>
           <option value="otro">Otro</option>
         </select></div>
-        <div class="field"><label>Monto ($)</label><input type="number" id="inv-monto" placeholder="0" min="0"></div>
+        <div class="field"><label>Moneda</label><select id="inv-moneda">
+          <option value="CLP">CLP — Peso chileno</option>
+          <option value="USD">USD — Dólar</option>
+          <option value="UF">UF — Unidad de Fomento</option>
+        </select></div>
       </div>
       <div class="fr2">
-        <div class="field"><label>Fecha</label><input type="date" id="inv-fecha"></div>
+        <div class="field"><label>Monto</label><input type="number" id="inv-monto" placeholder="0" min="0" step="any"></div>
         <div class="field"><label>Retorno esp. (%)</label><input type="number" id="inv-retorno" placeholder="0" min="0" step="0.1"></div>
       </div>
+      <div class="field"><label>Fecha</label><input type="date" id="inv-fecha"></div>
       <div class="field"><label>Nota</label><input type="text" id="inv-nota" placeholder="Ej: largo plazo, retiro 2027..."></div>
       <button class="btn-add" id="btn-add-inv">+ Agregar inversión</button>
     </div>
@@ -563,6 +574,29 @@ let metas=[],deudas=[],recurrentes=[],cats=[];
 let chartDonut=null,chartInvDonut=null,chartEvol=null;
 let privacyOn=false;
 let selectedMetaColor='#3ddc84',selectedCatColor='#3ddc84';
+let fxRates={USD:950,UF:38000}; // fallback rates
+
+async function fetchFxRates(){
+  try{
+    const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/clp.json');
+    if(!r.ok)throw new Error();
+    const d=await r.json();
+    // d.clp contains how many of each currency per 1 CLP
+    // we need CLP per USD and CLP per UF
+    // USD: 1 USD = 1/d.clp.usd CLP
+    if(d.clp&&d.clp.usd) fxRates.USD=Math.round(1/d.clp.usd);
+  } catch(e){}
+  try{
+    // UF from mindicador.cl
+    const r2=await fetch('https://mindicador.cl/api/uf');
+    if(!r2.ok)throw new Error();
+    const d2=await r2.json();
+    if(d2.serie&&d2.serie[0]) fxRates.UF=Math.round(d2.serie[0].valor);
+  } catch(e){}
+  // update fx display if visible
+  const el=document.getElementById('fx-display');
+  if(el)el.textContent=`1 USD = $${fxRates.USD.toLocaleString('es-CL')} · 1 UF = $${fxRates.UF.toLocaleString('es-CL')}`;
+}
 
 /* ══════════ STORAGE ══════════ */
 function sk(k){return `gf3_${vy}_${vm}_${k}`}
@@ -590,11 +624,26 @@ function allCats(){return [...DEFAULT_CATS,...cats]}
 /* ══════════ HELPERS ══════════ */
 function fmt(n){return '$'+Math.round(n).toLocaleString('es-CL')}
 function fmtD(n){return (n>=0?'+':'')+Math.round(n).toLocaleString('es-CL')}
+function fmtMoneda(monto,moneda){
+  if(moneda==='USD')return 'US$'+Math.round(monto).toLocaleString('es-CL');
+  if(moneda==='UF')return 'UF '+monto.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return fmt(monto);
+}
+function toCLP(monto,moneda){
+  if(moneda==='USD')return monto*fxRates.USD;
+  if(moneda==='UF')return monto*fxRates.UF;
+  return monto;
+}
 function pct(s,b){return b>0?Math.min(100,Math.round(s/b*100)):0}
 function catSpent(id){return gastos.filter(g=>g.cat===id).reduce((s,g)=>s+g.amt,0)}
 function totIng(){return ingresos.reduce((s,i)=>s+i.amt,0)}
 function totGas(){return gastos.reduce((s,g)=>s+g.amt,0)}
-function totInv(){return inversiones.reduce((s,i)=>s+i.monto,0)}
+function totInv(){return inversiones.reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0)}
+function totPortafolioCLP(){
+  // Historial acumulado del año actual en CLP
+  const h=ldg('inv_historico',[]);
+  return h.filter(i=>i.fecha&&i.fecha.startsWith(String(vy))).reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0);
+}
 function totDeu(){return deudas.reduce((s,d)=>s+(d.total-d.pagado),0)}
 function totCuotas(){return deudas.reduce((s,d)=>s+(d.cuota||0),0)}
 function totRec(){return recurrentes.reduce((s,r)=>s+r.monto,0)}
@@ -707,7 +756,10 @@ function renderResumen(){
   document.getElementById('k-ing-s').textContent=ingresos.length+' fuente'+(ingresos.length!==1?'s':'');
   if(prev.ing!==null){const d=ti-prev.ing;document.getElementById('k-ing-d').innerHTML=`<span style="color:${d>=0?'var(--green)':'var(--red)'}">${fmtD(d)} vs mes ant.</span>`;}
   animateVal(document.getElementById('k-inv'),tv);
-  document.getElementById('k-inv-s').textContent=vp+'% del ingreso';
+  document.getElementById('k-inv-s').textContent=ti>0?Math.round(tv/ti*100)+'% del ingreso del mes':'del ingreso del mes';
+  // portafolio total en CLP
+  const port=totPortafolioCLP();
+  animateVal(document.getElementById('k-port'),port);
   animateVal(document.getElementById('k-gas'),tg);
   document.getElementById('k-gas-s').textContent=gp+'% del ingreso';
   if(prev.gas!==null){const d=tg-prev.gas;document.getElementById('k-gas-d').innerHTML=`<span style="color:${d<=0?'var(--green)':'var(--red)'}">${fmtD(d)} vs mes ant.</span>`;}
@@ -807,13 +859,12 @@ function renderRecurrentes(){
 
 /* ══════════ INVERSIONES ══════════ */
 function renderInversiones(){
-  // all-time total from global storage
   const allInv=ldg('inv_historico',[]);
-  const totalPortafolio=allInv.reduce((s,i)=>s+i.monto,0);
+  const totalPortafolio=allInv.reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0);
   const thisMes=totInv();
   const ti=totIng();
   const vp=ti>0?Math.round(thisMes/ti*100):0;
-  const ret=allInv.reduce((s,i)=>s+(i.monto*(i.retorno||0)/100),0);
+  const ret=allInv.reduce((s,i)=>s+(toCLP(i.monto,i.moneda||'CLP')*(i.retorno||0)/100),0);
 
   document.getElementById('ip-total').textContent=fmt(totalPortafolio);
   document.getElementById('ip-mes').textContent=fmt(thisMes);
@@ -824,31 +875,38 @@ function renderInversiones(){
 
   document.getElementById('inv-count').textContent=allInv.length;
   document.getElementById('inv-resumen').innerHTML=`
-    <div class="srow"><span>Portafolio total</span><span class="sv" style="color:var(--teal)">${fmt(totalPortafolio)}</span></div>
+    <div class="srow"><span>Portafolio total (CLP)</span><span class="sv" style="color:var(--teal)">${fmt(totalPortafolio)}</span></div>
     <div class="srow"><span>Este mes</span><span class="sv">${fmt(thisMes)}</span></div>
     <div class="srow"><span>Retorno esperado</span><span class="sv" style="color:var(--green)">${fmt(ret)}</span></div>
-    <div class="srow"><span>Valor estimado</span><span class="sv">${fmt(totalPortafolio+ret)}</span></div>`;
+    <div class="srow"><span>Valor estimado</span><span class="sv">${fmt(totalPortafolio+ret)}</span></div>
+    <div class="srow"><span style="font-size:10px;color:var(--muted2)">TC: 1 USD = ${fmt(fxRates.USD)} · 1 UF = ${fmt(fxRates.UF)}</span><span></span></div>`;
 
-  // tipos grid
+  // tipos grid using CLP values
   const byTipo={};
-  allInv.forEach(i=>{byTipo[i.tipo]=(byTipo[i.tipo]||0)+i.monto});
+  allInv.forEach(i=>{byTipo[i.tipo]=(byTipo[i.tipo]||0)+toCLP(i.monto,i.moneda||'CLP')});
   document.getElementById('inv-tipos-grid').innerHTML=Object.keys(byTipo).length?`<div class="inv-tipo-grid">${Object.entries(byTipo).map(([t,v])=>`<div class="inv-tipo-card"><div class="inv-tipo-val" style="color:${INV_COLORS[t]||'#6b7280'}">${fmt(v)}</div><div class="inv-tipo-lbl">${INV_TIPOS[t]||t}</div></div>`).join('')}</div>`:'';
 
-  // donut
+  // donut using CLP values
   const keys=Object.keys(byTipo),dv=keys.map(k=>byTipo[k]),dc=keys.map(k=>INV_COLORS[k]||'#6b7280'),dt=dv.reduce((s,v)=>s+v,0);
   document.getElementById('inv-leg').innerHTML=keys.map((k,i)=>`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)"><span style="width:7px;height:7px;border-radius:2px;background:${dc[i]};display:inline-block"></span>${INV_TIPOS[k]||k} ${dt>0?Math.round(dv[i]/dt*100):0}%</span>`).join('');
   if(!chartInvDonut){chartInvDonut=new Chart(document.getElementById('chart-inv-donut'),{type:'doughnut',data:{datasets:[{data:dv.length?dv:[1],backgroundColor:dv.length?dc:['#1f1f26'],borderWidth:0,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false},tooltip:{enabled:!!dv.length}}}});}
   else{chartInvDonut.data.datasets[0].data=dv.length?dv:[1];chartInvDonut.data.datasets[0].backgroundColor=dv.length?dc:['#1f1f26'];chartInvDonut.update();}
 
-  // list all-time
+  // list — show original moneda + CLP equivalent
   const el=document.getElementById('inv-list');
   if(!allInv.length){el.innerHTML='<div class="empty">Sin inversiones registradas.</div>';return}
-  el.innerHTML=[...allInv].sort((a,b)=>b.fecha.localeCompare(a.fecha)).map((i,idx)=>`
-    <div class="item-row"><div class="dot" style="background:${INV_COLORS[i.tipo]||'#6b7280'}"></div>
+  el.innerHTML=[...allInv].sort((a,b)=>b.fecha.localeCompare(a.fecha)).map((i,idx)=>{
+    const moneda=i.moneda||'CLP';
+    const clpVal=toCLP(i.monto,moneda);
+    const monedaLabel=moneda!=='CLP'?`<span class="badge bk" style="font-size:9px">${moneda}</span>`:'';
+    const clpNote=moneda!=='CLP'?`<div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace">${fmt(clpVal)} CLP</div>`:'';
+    return `<div class="item-row"><div class="dot" style="background:${INV_COLORS[i.tipo]||'#6b7280'}"></div>
     <div class="ii"><div class="in">${i.nombre}</div><div class="im">${INV_TIPOS[i.tipo]||i.tipo} · ${i.fecha}${i.nota?' · '+i.nota:''}</div></div>
+    ${monedaLabel}
     ${i.retorno>0?`<span class="badge bg">+${i.retorno}%</span>`:''}
-    <div class="ia" style="color:var(--teal)">${fmt(i.monto)}</div>
-    <button class="idel" data-idx="${idx}" data-type="inversion">×</button></div>`).join('');
+    <div style="text-align:right"><div class="ia" style="color:var(--teal)">${fmtMoneda(i.monto,moneda)}</div>${clpNote}</div>
+    <button class="idel" data-idx="${idx}" data-type="inversion">×</button></div>`;
+  }).join('');
 }
 
 /* ══════════ METAS ══════════ */
@@ -978,16 +1036,13 @@ function addRecurrente(){
 
 function addInversion(){
   const nombre=document.getElementById('inv-nombre').value.trim(),tipo=document.getElementById('inv-tipo').value;
+  const moneda=document.getElementById('inv-moneda').value;
   const monto=parseFloat(document.getElementById('inv-monto').value)||0,fecha=document.getElementById('inv-fecha').value||today();
   const retorno=parseFloat(document.getElementById('inv-retorno').value)||0,nota=document.getElementById('inv-nota').value.trim();
   if(!nombre||!monto){alert('Completa nombre y monto.');return}
-  // add to monthly
-  inversiones.push({id:Date.now().toString(),nombre,tipo,monto,fecha,retorno,nota});
-  sv('inversiones',inversiones);
-  // add to global historico
-  const hist=ldg('inv_historico',[]);
-  hist.push({id:Date.now().toString(),nombre,tipo,monto,fecha,retorno,nota});
-  svg('inv_historico',hist);
+  const entry={id:Date.now().toString(),nombre,tipo,moneda,monto,fecha,retorno,nota};
+  inversiones.push(entry);sv('inversiones',inversiones);
+  const hist=ldg('inv_historico',[]);hist.push({...entry,id:Date.now().toString()+'h'});svg('inv_historico',hist);
   document.getElementById('inv-nombre').value='';document.getElementById('inv-monto').value='';document.getElementById('inv-retorno').value='';document.getElementById('inv-nota').value='';
   if(chartInvDonut){chartInvDonut.destroy();chartInvDonut=null}
   renderAll();
@@ -1088,7 +1143,46 @@ document.getElementById('btn-backup').addEventListener('click',()=>{
 document.getElementById('inp-restore').addEventListener('change',function(){
   if(!this.files[0])return;
   const r=new FileReader();
-  r.onload=e=>{try{const bk=JSON.parse(e.target.result);if(!bk.data){alert('Archivo inválido.');return}if(!confirm('¿Restaurar backup del '+bk.exported.slice(0,10)+'?'))return;Object.entries(bk.data).forEach(([k,v])=>localStorage.setItem(k,typeof v==='string'?v:JSON.stringify(v)));loadAll();renderAll();alert('Backup restaurado.');}catch(err){alert('Error: '+err.message);}};
+  r.onload=e=>{
+    try{
+      const bk=JSON.parse(e.target.result);
+      if(!bk.data){alert('Archivo inválido.');return}
+      const dateStr=bk.exported?bk.exported.slice(0,10):'desconocida';
+      if(!confirm('¿Restaurar backup del '+dateStr+'?\nSe convertirán los datos al formato actual si vienen de una versión anterior.'))return;
+
+      // detect source prefix
+      const keys=Object.keys(bk.data);
+      let srcPrefix='gf3_';
+      if(keys.some(k=>k.startsWith('gf2_')))srcPrefix='gf2_';
+      else if(keys.some(k=>k.startsWith('gf_')))srcPrefix='gf_';
+      // also handle global prefix
+      const srcGlobal=srcPrefix==='gf3_'?'gf3_g_':srcPrefix==='gf2_'?'gf2_g_':'fp_global_';
+
+      let migrated=0;
+      Object.entries(bk.data).forEach(([k,v])=>{
+        const val=typeof v==='string'?v:JSON.stringify(v);
+        if(k.startsWith(srcGlobal)){
+          // global key → remap to gf3_g_
+          const newKey='gf3_g_'+k.slice(srcGlobal.length);
+          localStorage.setItem(newKey,val);migrated++;
+        } else if(k.startsWith(srcPrefix)){
+          // monthly key → remap to gf3_
+          const newKey='gf3_'+k.slice(srcPrefix.length);
+          localStorage.setItem(newKey,val);migrated++;
+        } else {
+          // unknown prefix, store as-is
+          localStorage.setItem(k,val);
+        }
+      });
+
+      loadAll();
+      const ai=document.getElementById('inp-ahorro');if(ai&&ahorro>0)ai.value=ahorro;
+      if(chartDonut){chartDonut.destroy();chartDonut=null}
+      if(chartInvDonut){chartInvDonut.destroy();chartInvDonut=null}
+      renderAll();
+      alert('Backup restaurado correctamente. '+migrated+' entradas importadas'+(srcPrefix!=='gf3_'?' (convertidas desde versión anterior)':'')+'.');
+    }catch(err){alert('Error al leer el archivo: '+err.message);}
+  };
   r.readAsText(this.files[0]);this.value='';
 });
 
@@ -1136,7 +1230,8 @@ function init(){
   document.getElementById('inp-ahorro') && document.getElementById('inp-ahorro').addEventListener('input',function(){
     ahorro=+this.value||0;sv('ahorro',ahorro);renderResumen();updateSidebar();
   });
-  renderAll();
+  // fetch fx rates then render
+  fetchFxRates().then(()=>renderAll());
 }
 
 init();

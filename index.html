@@ -260,6 +260,25 @@ main::-webkit-scrollbar{width:4px}
 main::-webkit-scrollbar-track{background:transparent}
 main::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 
+/* privacy mode */
+body.privacy .kpi-val,
+body.privacy .item-amt,
+body.privacy .sum-val,
+body.privacy .pbar-nums,
+body.privacy .sub-card-amounts,
+body.privacy .nav-badge{
+  filter:blur(8px);
+  user-select:none;
+  transition:filter 0.2s;
+}
+body.privacy .kpi-val:hover,
+body.privacy .item-amt:hover,
+body.privacy .sum-val:hover,
+body.privacy .pbar-nums:hover,
+body.privacy .sub-card-amounts:hover{
+  filter:blur(0);
+}
+
 @media(max-width:800px){
   :root{--sidebar-w:60px}
   .brand-name,.brand-sub,.mc-lbl,.nav-item span,.nav-badge,.sidebar-footer{display:none}
@@ -332,6 +351,7 @@ main::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
   </nav>
 
   <div class="sidebar-footer">
+    <button class="btn-csv" id="btn-privacy" style="margin-bottom:6px;border-color:rgba(255,255,255,0.15)">◉ Ocultar valores</button>
     <button class="btn-csv" id="btn-csv">↓ Exportar CSV</button>
     <button class="btn-csv" id="btn-backup" style="margin-top:6px;border-color:rgba(184,245,58,0.3);color:var(--accent)">↓ Backup JSON</button>
     <label class="btn-csv" id="lbl-restore" style="margin-top:6px;display:block;text-align:center;cursor:pointer">↑ Restaurar backup
@@ -1143,6 +1163,16 @@ function init(){
   // month
   document.getElementById('btn-prev').addEventListener('click',()=>changeMonth(-1));
   document.getElementById('btn-next').addEventListener('click',()=>changeMonth(1));
+  // privacy toggle
+  let privacy=false;
+  const btnPrivacy=document.getElementById('btn-privacy');
+  btnPrivacy.addEventListener('click',function(){
+    privacy=!privacy;
+    document.body.classList.toggle('privacy',privacy);
+    btnPrivacy.textContent=privacy?'◎ Mostrar valores':'◉ Ocultar valores';
+    btnPrivacy.style.borderColor=privacy?'rgba(184,245,58,0.4)':'rgba(255,255,255,0.15)';
+    btnPrivacy.style.color=privacy?'var(--accent)':'';
+  });
   // csv
   document.getElementById('btn-csv').addEventListener('click',exportCSV);
   // backup / restore

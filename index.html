@@ -295,7 +295,7 @@ body.privacy .kpi-val:hover,body.privacy .ia:hover,body.privacy .sv:hover{filter
       <div class="kpi-lbl">Invertido este mes <span class="tip-mark">?<span class="tip-popup">Lo que aportaste a inversiones solo este mes, en CLP. Se descuenta del balance.</span></span></div>
       <div class="kpi-val" id="k-inv">$0</div><div class="kpi-sub" id="k-inv-s">del ingreso del mes</div></div>
     <div class="kpi"><div class="kpi-top" style="background:var(--purple)"></div>
-      <div class="kpi-lbl">Invertido este año <span class="tip-mark">?<span class="tip-popup">Suma de todas tus inversiones del año actual convertidas a CLP al tipo de cambio actual.</span></span></div>
+      <div class="kpi-lbl">Invertido año (excl. mes) <span class="tip-mark">?<span class="tip-popup">Suma de inversiones del año actual, excluyendo el mes en curso. Complementa el KPI de "Invertido este mes".</span></span></div>
       <div class="kpi-val" id="k-port">$0</div>
       <div class="kpi-sub" id="fx-display" style="font-size:9px;margin-top:3px;color:var(--muted2)">cargando tipo de cambio...</div></div>
   </div>
@@ -638,11 +638,21 @@ function pct(s,b){return b>0?Math.min(100,Math.round(s/b*100)):0}
 function catSpent(id){return gastos.filter(g=>g.cat===id).reduce((s,g)=>s+g.amt,0)}
 function totIng(){return ingresos.reduce((s,i)=>s+i.amt,0)}
 function totGas(){return gastos.reduce((s,g)=>s+g.amt,0)}
-function totInv(){return inversiones.reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0)}
+function totInv(){
+  return inversiones.filter(i=>{
+    if(!i.fecha)return false;
+    const [y,m]=i.fecha.split('-').map(Number);
+    return y===vy&&(m-1)===vm;
+  }).reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0);
+}
 function totPortafolioCLP(){
-  // Historial acumulado del año actual en CLP
+  // Acumulado del año actual excluyendo el mes actual (ese ya lo muestra k-inv)
   const h=ldg('inv_historico',[]);
-  return h.filter(i=>i.fecha&&i.fecha.startsWith(String(vy))).reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0);
+  return h.filter(i=>{
+    if(!i.fecha)return false;
+    const [y,m]=i.fecha.split('-').map(Number);
+    return y===vy&&(m-1)!==vm;
+  }).reduce((s,i)=>s+toCLP(i.monto,i.moneda||'CLP'),0);
 }
 function totDeu(){return deudas.reduce((s,d)=>s+(d.total-d.pagado),0)}
 function totCuotas(){return deudas.reduce((s,d)=>s+(d.cuota||0),0)}

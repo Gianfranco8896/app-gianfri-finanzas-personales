@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -332,6 +333,10 @@ main::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 
   <div class="sidebar-footer">
     <button class="btn-csv" id="btn-csv">↓ Exportar CSV</button>
+    <button class="btn-csv" id="btn-backup" style="margin-top:6px;border-color:rgba(184,245,58,0.3);color:var(--accent)">↓ Backup JSON</button>
+    <label class="btn-csv" id="lbl-restore" style="margin-top:6px;display:block;text-align:center;cursor:pointer">↑ Restaurar backup
+      <input type="file" id="inp-restore" accept=".json" style="display:none">
+    </label>
   </div>
 </aside>
 
@@ -1083,6 +1088,45 @@ function exportCSV(){
   a.click();
 }
 
+/* ============ BACKUP / RESTORE ============ */
+function exportBackup(){
+  // collect all gf2_ keys from localStorage
+  const backup={version:2,exported:new Date().toISOString(),data:{}};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith('gf2_')){
+      try{backup.data[k]=JSON.parse(localStorage.getItem(k))}
+      catch(e){backup.data[k]=localStorage.getItem(k)}
+    }
+  }
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`gianfrinanzas_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function restoreBackup(file){
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const backup=JSON.parse(e.target.result);
+      if(!backup.data){alert('Archivo inválido.');return}
+      if(!confirm('¿Restaurar backup del '+backup.exported.slice(0,10)+'? Esto reemplazará los datos actuales.')){return}
+      Object.entries(backup.data).forEach(([k,v])=>{
+        localStorage.setItem(k,typeof v==='string'?v:JSON.stringify(v));
+      });
+      loadAll();
+      const ai=document.getElementById('inp-ahorro');
+      if(ai)ai.value=ahorro>0?ahorro:'';
+      renderAll();
+      alert('Backup restaurado correctamente.');
+    } catch(err){alert('Error al leer el archivo: '+err.message);}
+  };
+  reader.readAsText(file);
+}
+
 /* ============ INIT ============ */
 function init(){
   // populate gas-cat
@@ -1101,6 +1145,12 @@ function init(){
   document.getElementById('btn-next').addEventListener('click',()=>changeMonth(1));
   // csv
   document.getElementById('btn-csv').addEventListener('click',exportCSV);
+  // backup / restore
+  document.getElementById('btn-backup').addEventListener('click',exportBackup);
+  document.getElementById('inp-restore').addEventListener('change',function(){
+    if(this.files[0])restoreBackup(this.files[0]);
+    this.value='';
+  });
   // add buttons
   document.getElementById('btn-add-ing').addEventListener('click',addIngreso);
   document.getElementById('btn-add-gas').addEventListener('click',addGasto);
